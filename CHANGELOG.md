@@ -6,6 +6,10 @@ here. Native format compatibility is documented separately in
 
 ## Unreleased
 
+## Unreleased
+
+- Make atomic writes portable on Windows (Enrico, upstream PR #8).
+
 ## 0.11.0 - 2026-09-11
 
 - Read root Codex rollouts written with `history_mode: "paginated"` by using
