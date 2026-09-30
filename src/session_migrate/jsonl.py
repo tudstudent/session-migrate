@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -160,7 +161,9 @@ def write_private_atomic(path: Path, data: bytes) -> tuple[int, int]:
         temporary_path = Path(temporary_name)
         published_identity: tuple[int, int] | None = None
         try:
-            os.fchmod(descriptor, 0o600)
+            # os.fchmod is Unix-only; Windows keeps the creating user's ACLs.
+            if hasattr(os, "fchmod"):
+                os.fchmod(descriptor, 0o600)
             with os.fdopen(descriptor, "wb") as stream:
                 stream.write(data)
                 stream.flush()
@@ -178,7 +181,9 @@ def write_private_atomic(path: Path, data: bytes) -> tuple[int, int]:
             _fsync_directory(path.parent)
             return published_identity
         except BaseException:
-            temporary_path.unlink(missing_ok=True)
+            # A cleanup failure must not replace the error being reported.
+            with contextlib.suppress(OSError):
+                temporary_path.unlink(missing_ok=True)
             if published_identity is not None:
                 _unlink_if_same_file(path, published_identity)
             raise
@@ -205,6 +210,10 @@ def _mkdir_private(path: Path) -> None:
 
 
 def _fsync_directory(path: Path) -> None:
+    # Windows cannot os.open() a directory, and NTFS journaling keeps
+    # directory entries durable without an explicit fsync.
+    if os.name == "nt":
+        return
     descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
     try:
         os.fsync(descriptor)

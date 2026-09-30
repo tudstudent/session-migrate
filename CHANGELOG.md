@@ -10,6 +10,11 @@ here. Native format compatibility is documented separately in
   legacy 1.17.20 adapter and native no-overwrite/dry-run controls. Preserve
   portable tools, inline media, and completed compaction summaries, and account
   for incomplete tools and provider-private state.
+- Fix atomic writes on Windows in `write_private_atomic`: skip the Unix-only
+  `os.fchmod` call and the directory `fsync` where the platform cannot
+  perform them (Windows keeps the creating user's ACLs and NTFS journaling
+  covers directory durability), and make temporary-file cleanup best-effort
+  so a cleanup failure cannot mask the original error.
 
 ## 0.11.0 - 2026-09-11
 

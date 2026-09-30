@@ -99,3 +99,34 @@ def test_atomic_write_does_not_clobber_racing_creator(
         write_private_atomic(path, b"migrator output\n")
 
     assert path.read_bytes() == b"racing winner"
+
+
+def test_atomic_write_when_fchmod_is_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Windows and WASI have no os.fchmod; writes must still succeed there.
+    monkeypatch.delattr(os, "fchmod", raising=False)
+    path = tmp_path / "session.jsonl"
+
+    write_private_atomic(path, b"{}\n")
+
+    assert path.read_bytes() == b"{}\n"
+    assert not list(tmp_path.glob(".*.tmp"))
+
+
+def test_atomic_write_cleanup_does_not_mask_original_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "session.jsonl"
+
+    def failing_fchmod(descriptor: int, mode: int) -> None:
+        raise OSError("fchmod failed")
+
+    def failing_unlink(target: object, **kwargs: object) -> None:
+        raise OSError("cleanup unlink failed")
+
+    monkeypatch.setattr(os, "fchmod", failing_fchmod)
+    monkeypatch.setattr(os, "unlink", failing_unlink)
+
+    with pytest.raises(JsonlError, match="fchmod failed"):
+        write_private_atomic(path, b"{}\n")
