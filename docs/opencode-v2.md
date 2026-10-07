@@ -21,6 +21,10 @@ portable session model has no variant field; choose the desired target variant
 in OpenCode. Private-only or whitespace-only compaction records never become
 portable checkpoints that could retire the earlier readable history.
 No private SQLite writes or source transcript changes are performed.
+Free-form tool inputs are wrapped as `{\"input\": ORIGINAL_VALUE}` to satisfy
+OpenCode's object input schema. The `tool_call:non_object_input` manifest counter
+records this shape transformation, not an omitted call. String inputs remain
+unchanged inside the wrapper, along with their call IDs and linked results.
 
 Dry run performs native preflight without importing a session or writing a
 migration manifest. The target CLI itself may initialize its ordinary local
