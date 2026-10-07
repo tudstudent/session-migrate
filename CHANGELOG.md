@@ -24,7 +24,12 @@ here. Native format compatibility is documented separately in
 - Read root Codex rollouts written with `history_mode: "paginated"` by using
   canonical completed user and agent turn items while keeping provider
   envelopes out of the portable transcript.
-- Reject paginated history bases, subagent projections, mixed or conflicting
+- Support complete self-contained paginated subagent projections using primary
+  child metadata and the exact ordinal boundary; exclude inherited parent
+  context, preserve readable targeted correspondence, and account for encrypted
+  fragments without restoring live multi-agent orchestration. Catalog discovery
+  agrees with the bounded reader.
+- Reject external paginated history bases, invalid/incomplete child projections, mixed or conflicting
   history modes, unknown modes, and non-contiguous ordinals instead of
   guessing at a resumable conversation.
 - Add a sanitized real-structure Codex 0.153.4 paginated fixture and regressions

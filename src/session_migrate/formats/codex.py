@@ -29,8 +29,31 @@ SUPPORTED_HISTORY_MODES = frozenset({"legacy", "paginated"})
 def parse(path: Path) -> Session:
     records = list(iter_jsonl(path))
     history_mode = _history_mode(records)
+    child_start = _subagent_history_start(records)
     if history_mode == "paginated":
         _validate_paginated_root(records)
+        if child_start is not None and child_start > len(records):
+            raise SessionMigrateError("Codex subagent inherited prefix is incomplete")
+    primary_meta = object_value(records[0].value.get("payload")) if records else {}
+    child_path = string(primary_meta.get("agent_path"))
+    child_records = [r for r in records if child_start is None or r.value["ordinal"] >= child_start]
+    canonical_messages = _canonical_message_ids(child_records) if child_start is not None else {}
+    inherited_calls = {
+        string(object_value(r.value.get("payload")).get("call_id"))
+        for r in records
+        if child_start is not None
+        and r.value["ordinal"] < child_start
+        and string(r.value.get("type")) == "response_item"
+        and string(object_value(r.value.get("payload")).get("type"))
+        in {"function_call", "custom_tool_call"}
+    }
+    child_calls = {
+        string(object_value(r.value.get("payload")).get("call_id"))
+        for r in child_records
+        if string(r.value.get("type")) == "response_item"
+        and string(object_value(r.value.get("payload")).get("type"))
+        in {"function_call", "custom_tool_call"}
+    }
     events: list[Event] = []
     fallback_events: list[Event] = []
     context_compacted_events: list[Event] = []
@@ -50,6 +73,9 @@ def parse(path: Path) -> Session:
         timestamp = string(value.get("timestamp"))
         payload = object_value(value.get("payload"))
         provenance = Provenance(record.index, record_type)
+        if child_start is not None and record.index != 0 and value["ordinal"] < child_start:
+            events.append(_projection_omission("subagent_inherited_prefix", timestamp, provenance))
+            continue
         if record_type == "session_meta":
             session_id = (
                 session_id or string(payload.get("id")) or string(payload.get("session_id"))
@@ -61,7 +87,20 @@ def parse(path: Path) -> Session:
             model_provider = model_provider or string(payload.get("model_provider"))
             continue
         if record_type == "response_item":
-            if history_mode == "paginated" and string(payload.get("type")) in {
+            item_type = string(payload.get("type"))
+            if child_start is not None and item_type == "agent_message":
+                parsed = _subagent_message_events(
+                    payload, child_path, canonical_messages, timestamp, provenance
+                )
+            elif (
+                child_start is not None
+                and item_type in {"function_call_output", "custom_tool_call_output"}
+                and string(payload.get("call_id")) in inherited_calls - child_calls
+            ):
+                parsed = [
+                    _projection_omission("subagent_inherited_tool_result", timestamp, provenance)
+                ]
+            elif history_mode == "paginated" and item_type in {
                 "message",
                 "agent_message",
             }:
@@ -230,10 +269,20 @@ def parse(path: Path) -> Session:
 def _history_mode(records: list[Any]) -> str:
     selected_mode = "legacy"
     metadata_seen = False
+    child_start = _subagent_history_start(records)
+    if child_start is not None:
+        _validate_paginated_root(records)
+    primary_id = None
     for record in records:
         if string(record.value.get("type")) != "session_meta":
             continue
         payload = object_value(record.value.get("payload"))
+        if (
+            child_start is not None
+            and record.index != 0
+            and record.value.get("ordinal", child_start) < child_start
+        ):
+            continue
         history_mode = string(payload.get("history_mode")) or "legacy"
         if history_mode not in SUPPORTED_HISTORY_MODES:
             raise SessionMigrateError(
@@ -242,10 +291,29 @@ def _history_mode(records: list[Any]) -> str:
             )
         if payload.get("history_base") is not None:
             raise SessionMigrateError("Codex history_base lineage is not supported")
-        if payload.get("subagent_history_start_ordinal") is not None:
+        if child_start is None and payload.get("subagent_history_start_ordinal") is not None:
             raise SessionMigrateError(
-                "Codex paginated subagent history projection is not supported"
+                "Codex subagent boundary must be declared by primary metadata"
             )
+        if child_start is not None:
+            if history_mode != "paginated":
+                raise SessionMigrateError(
+                    "Codex subagent history projection requires paginated mode"
+                )
+            current_id = string(payload.get("id")) or string(payload.get("session_id"))
+            if not metadata_seen:
+                primary_id = current_id
+            elif current_id != primary_id:
+                raise SessionMigrateError("Codex child metadata changes session identity")
+            boundary = payload.get("subagent_history_start_ordinal", child_start)
+            if (
+                isinstance(boundary, bool)
+                or not isinstance(boundary, int)
+                or boundary != child_start
+            ):
+                raise SessionMigrateError(
+                    "Codex child metadata changes history projection boundary"
+                )
         if metadata_seen and history_mode != selected_mode:
             raise SessionMigrateError("Codex session metadata has conflicting history modes")
         selected_mode = history_mode
@@ -255,6 +323,114 @@ def _history_mode(records: list[Any]) -> str:
     ):
         raise SessionMigrateError("Codex paginated history must start with session metadata")
     return selected_mode
+
+
+def _subagent_history_start(records: list[Any]) -> int | None:
+    if not records or string(records[0].value.get("type")) != "session_meta":
+        return None
+    start = object_value(records[0].value.get("payload")).get("subagent_history_start_ordinal")
+    if start is not None and (isinstance(start, bool) or not isinstance(start, int) or start < 0):
+        raise SessionMigrateError("Codex subagent history boundary must be a nonnegative integer")
+    return start
+
+
+def _projection_omission(reason: str, timestamp: str | None, provenance: Provenance) -> Event:
+    return Event(
+        kind=EventKind.OPAQUE,
+        timestamp=timestamp,
+        payload={"reason": reason},
+        provenance=provenance,
+    )
+
+
+def _canonical_message_ids(records: list[Any]) -> dict[str, tuple[Role, str]]:
+    result = {}
+    for record in records:
+        payload = object_value(record.value.get("payload"))
+        if (
+            string(record.value.get("type")) != "event_msg"
+            or string(payload.get("type")) != "item_completed"
+        ):
+            continue
+        item = object_value(payload.get("item"))
+        if string(item.get("type")) not in {"UserMessage", "AgentMessage"}:
+            continue
+        item_id = string(item.get("id"))
+        if not item_id:
+            continue
+        blocks = item.get("content")
+        if not isinstance(blocks, list):
+            continue
+        text = "\n".join(
+            string(block.get("text")) or ""
+            for block in blocks
+            if isinstance(block, dict) and block.get("type") in {"text", "Text"}
+        )
+        projection = (Role.USER if item.get("type") == "UserMessage" else Role.ASSISTANT, text)
+        if item_id in result and result[item_id] != projection:
+            raise SessionMigrateError("Codex canonical message ID has conflicting content")
+        result[item_id] = projection
+    return result
+
+
+def _subagent_message_events(
+    payload: dict[str, Any],
+    child_path: str | None,
+    canonical: dict[str, tuple[Role, str]],
+    timestamp: str | None,
+    provenance: Provenance,
+) -> list[Event]:
+    if (
+        not child_path
+        or payload.get("recipient") != child_path
+        or not string(payload.get("author"))
+    ):
+        return [
+            _projection_omission("subagent_foreign_or_ambiguous_message", timestamp, provenance)
+        ]
+    blocks = payload.get("content")
+    if not isinstance(blocks, list):
+        raise SessionMigrateError("Codex child agent-message content must be an array")
+    texts = []
+    losses = [_projection_omission("subagent_message_envelope", timestamp, provenance)]
+    for block in blocks:
+        if not isinstance(block, dict):
+            raise SessionMigrateError("Codex child agent-message block must be an object")
+        kind = block.get("type")
+        if kind == "input_text" and isinstance(block.get("text"), str):
+            texts.append(block["text"])
+        elif kind == "encrypted_content" and isinstance(block.get("encrypted_content"), str):
+            losses.append(
+                _projection_omission("subagent_encrypted_message_part", timestamp, provenance)
+            )
+        else:
+            raise SessionMigrateError(
+                "Codex child agent-message block has unsupported or malformed content"
+            )
+    text = "\n".join(texts)
+    item_id = string(payload.get("id"))
+    if item_id in canonical:
+        if (Role.USER, text) != canonical[item_id]:
+            raise SessionMigrateError("Codex child envelope and canonical message ID disagree")
+        losses.append(
+            _projection_omission("subagent_canonical_message_duplicate", timestamp, provenance)
+        )
+        return losses
+    if not text.strip():
+        losses.append(
+            _projection_omission("subagent_message_without_readable_text", timestamp, provenance)
+        )
+        return losses
+    return [
+        Event(
+            kind=EventKind.MESSAGE,
+            role=Role.USER,
+            text=text,
+            timestamp=timestamp,
+            provenance=provenance,
+        ),
+        *losses,
+    ]
 
 
 def _validate_paginated_root(records: list[Any]) -> None:

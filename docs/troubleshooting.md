@@ -265,10 +265,13 @@ credentials. See the [Hermes](hermes-format.md),
 
 A complete root paginated rollout is supported when every record has an integer
 ordinal contiguous from zero. Missing/gapped ordinals are treated as corrupt.
-`history_base` and `subagent_history_start_ordinal` mean the file depends on an
-external or projected prefix and remain unsupported; `--format codex` cannot
-bypass either guard. Resume or export the root session instead of flattening
-the dependent file by hand.
+Self-contained child rollouts with `subagent_history_start_ordinal` are supported
+when their inherited prefix is complete. The reader excludes that prefix and
+retains the child's projected history and readable incoming correspondence.
+Encrypted message fragments remain explicit omissions. Invalid boundaries,
+incomplete ordinal streams, and external `history_base` lineage are rejected;
+`--format codex` cannot bypass those checks. An imported child is an independent
+conversation and does not recreate live multi-agent orchestration.
 
 ## Claude sidechain/subagent
 

@@ -82,6 +82,19 @@ that test. Provider-private traces and source reasoning variants remain the
 explicit omissions described above; native continuation does not establish
 their portability or recover malformed source records.
 
+The subsequent self-contained Codex subagent projection change passed an
+affected Linux gate of **183 tests**, with one opt-in real-store catalog smoke
+test skipped. This includes the actual isolated v2 integration, catalog
+classification, boundary/inherited-metadata validation, tool/image linkage,
+targeted plaintext and encrypted-part accounting, and duplicate/foreign-message
+checks. An independent installed-wheel proof imported/exported a synthetic
+child through the native CLI and confirmed a retry kept the same session ID
+without duplication. A frozen actual child snapshot was converted file-only:
+the exact portable-content audit reported no differences and its source stayed
+unchanged. These follow-up checks made no inference requests and imported no
+real user sessions. They do not establish decryption, live parent/child
+orchestration, or external `history_base` resolution.
+
 ## Windows preparation
 
 The separate Windows changes reuse [upstream PR #8](https://github.com/xhluca/session-migrate/pull/8)

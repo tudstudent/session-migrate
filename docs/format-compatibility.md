@@ -302,6 +302,24 @@ reasoning data. Direct image/audio user inputs are retained when represented
 by the canonical TurnItem. Local media paths and other TurnItem blocks remain
 explicit opaque losses.
 
+Self-contained paginated subagent rollouts are also supported. The first session
+metadata identifies the child and declares `subagent_history_start_ordinal`.
+Every ordinal must remain contiguous from zero and the entire inherited prefix
+must be present. Parent records below the boundary, including inherited metadata,
+messages, tools, and compactions, are excluded and counted explicitly. Child
+tools/results retain their linkage; a result referring only to an inherited
+parent call is excluded rather than synthesized as child activity.
+
+Readable `agent_message` fragments addressed exactly to the child's `agent_path`
+are retained as ordinary user messages, without system/developer privileges.
+Encrypted fragments and envelope/routing metadata are explicit omissions.
+Foreign recipients and ambiguous envelopes remain opaque; malformed targeted
+blocks fail closed. Duplicate suppression requires an authoritative completed
+message with the same ID, role, and exact text. No decryption is attempted, and
+partial plaintext does not establish recovery of the complete task payload.
+The result is an independent conversation, not restored live parent/child
+orchestration. Catalog discovery applies the same bounded reader checks.
+
 Current legacy rollouts can contain `compacted.replacement_history`. Codex
 installs that array as the effective history at the checkpoint and replays only
 later items. In a bounded structural audit, replacement arrays ended in a
@@ -320,14 +338,14 @@ Those records are not all portable conversation history.
 
 Every ordered pair among the eighteen formats is implemented, for 324 routes:
 
-- full portable adapters: Claude, Codex legacy and root paginated, Pi, OMP, OpenCode, Copilot,
+- full portable adapters: Claude, Codex legacy and self-contained paginated, Pi, OMP, OpenCode, Copilot,
   Antigravity, Vibe, Muse, Qwen, Kimi, Grok, Kilo, OpenHands, Hermes,
   MastraCode, and Devin;
 - experimental text-only adapter: Cursor.
 
 Same-format routes are portable rewrites into new sessions, not byte copies.
-Codex `history_base` lineage and paginated subagent projections remain
-fail-closed. Cursor is experimental, build-pinned, and deliberately transfers
+Codex external `history_base` lineage remains fail-closed. Incomplete or invalid
+child projection boundaries are also rejected. Cursor is experimental, build-pinned, and deliberately transfers
 only ordered user/assistant text. The
 detailed table below explains the original Claude/Codex pair; target-specific
 behavior is documented in [Additional native formats](additional-target-formats.md)
@@ -369,7 +387,8 @@ Legend:
 | Claude sidechains/subagents | **Unsupported** | N/A | The catalog indexes nested sidechains as unsupported, but direct lookup/conversion does not import them; transfer the parent session. |
 | Codex legacy linear history | N/A | **Supported** | Ordered response items become one linear Claude UUID graph. |
 | Codex root paginated history | N/A | **Supported** | Contiguous canonical completed TurnItems supply user/assistant turns; provider-context messages are not replayed. Replacement-history compaction uses the expanded-transcript policy above. |
-| Codex paginated forks/subagents | N/A | **Unsupported** | `history_base` and `subagent_history_start_ordinal` require external or projected history and are rejected rather than silently truncating or duplicating a conversation. |
+| Codex self-contained paginated subagents | N/A | **Supported** | Complete ordinal prefixes are validated; inherited parent context is excluded and readable child correspondence is retained with explicit private-state omissions. Imports are independent conversations. |
+| Codex external history bases/forks | N/A | **Unsupported** | `history_base` requires external lineage resolution and is rejected rather than silently truncating a conversation. |
 | Codex UI-only messages | N/A | **Lossy fallback** | Used as the conversation when no response-item messages exist. In a mixed partial file, exact normalized duplicates are removed and unmatched projections are retained with `message:ui_only_projection`; fuzzy matching is never used. |
 | Turn context, policies, world state, snapshots | **Unsupported** | **Unsupported** | Codex `turn_context` is counted as context; `world_state` and `security_risk_score` become counted opaque events. Shell snapshots, approvals, external credential stores, MCP state, memories, goals, and configuration are outside transcript conversion. |
 | Unknown source records/blocks | **Unsupported** | **Unsupported** | They become content-free opaque/sentinel events where recognized and are counted at write time, including unknown nested tool-result blocks. |

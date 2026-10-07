@@ -398,8 +398,8 @@ def test_codex_paginated_catalog_fails_closed_on_incomplete_projections(
     cases = {
         "40000000-0000-4000-8000-000000000001": ("codex_history_base", "unsupported"),
         "40000000-0000-4000-8000-000000000002": (
-            "codex_subagent_history",
-            "unsupported",
+            "codex_subagent_projection",
+            "corrupt",
         ),
         "40000000-0000-4000-8000-000000000003": (
             "codex_paginated_ordinals",
@@ -422,8 +422,8 @@ def test_codex_paginated_catalog_fails_closed_on_incomplete_projections(
                 "end_ordinal_exclusive": 2,
                 "end_byte_offset": 512,
             }
-        elif reason == "codex_subagent_history":
-            meta["subagent_history_start_ordinal"] = 2
+        elif reason == "codex_subagent_projection":
+            meta["subagent_history_start_ordinal"] = 1000
         elif reason == "codex_paginated_ordinals":
             records[1]["ordinal"] = 99
         elif reason == "codex_history_mode":

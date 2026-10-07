@@ -123,13 +123,15 @@ def test_history_base_still_refused(tmp_path: Path) -> None:
         codex.parse(path)
 
 
-def test_paginated_subagent_projection_still_refused(tmp_path: Path) -> None:
+def test_paginated_subagent_projection_excludes_inherited_call(tmp_path: Path) -> None:
     def mutate(records):
         records[0]["payload"]["subagent_history_start_ordinal"] = 8
 
     path = _rewrite_fixture(tmp_path, mutate)
-    with pytest.raises(SessionMigrateError, match="subagent history projection"):
-        codex.parse(path)
+    session = codex.parse(path)
+    assert not any(e.kind == EventKind.TOOL_CALL for e in session.events)
+    assert not any(e.kind == EventKind.TOOL_RESULT for e in session.events)
+    assert any(e.payload.get("reason") == "subagent_inherited_tool_result" for e in session.events)
 
 
 def test_paginated_metadata_must_be_first_and_consistent(tmp_path: Path) -> None:
