@@ -64,3 +64,33 @@ def test_native_manifest_and_export_descriptors_request_binary_mode(tmp_path, mo
         Path("opencode.exe"), "ses_test", tmp_path / "export.json", {}
     )
     assert len(seen) == 2 and all(flags & fake_binary for flags in seen)
+
+
+@pytest.mark.parametrize("failure", ["timeout", "oserror"])
+def test_native_export_closes_descriptor_before_exception_cleanup(tmp_path, monkeypatch, failure):
+    from session_migrate.errors import SessionMigrateError
+
+    monkeypatch.setattr(conversion, "_opencode_version", lambda *args: "2.0.23")
+    descriptor = None
+
+    def failed_export(command, **kwargs):
+        nonlocal descriptor
+        descriptor = kwargs["stdout"]
+        if failure == "timeout":
+            raise subprocess.TimeoutExpired(command, 1)
+        raise OSError("export failed")
+
+    monkeypatch.setattr(subprocess, "run", failed_export)
+    original_unlink = os.unlink
+
+    def windows_style_unlink(path, *args, **kwargs):
+        assert descriptor is not None
+        with pytest.raises(OSError):
+            os.fstat(descriptor)
+        return original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "unlink", windows_style_unlink)
+    target = tmp_path / "failed-export.json"
+    with pytest.raises(SessionMigrateError, match="CLI export failed"):
+        conversion._invoke_opencode_export(Path("opencode.exe"), "ses_test", target, {})
+    assert not target.exists()

@@ -16,6 +16,10 @@ retained. Incomplete tool calls are archived as explicit imported errors,
 because native v2 transfer drops unsettled assistant records. Their input is
 retained and this change is recorded in the loss manifest. Encrypted checkpoints
 and provider-private state are not portable and remain explicitly accounted for.
+Reasoning variants in source Model.Ref are counted as omissions because the
+portable session model has no variant field; choose the desired target variant
+in OpenCode. Private-only or whitespace-only compaction records never become
+portable checkpoints that could retire the earlier readable history.
 No private SQLite writes or source transcript changes are performed.
 
 Dry run performs native preflight without importing a session or writing a
@@ -41,7 +45,8 @@ validation is separate; Linux tests do not establish Windows runtime behavior.
 The separate Windows changes reuse [upstream PR #8](https://github.com/xhluca/session-migrate/pull/8)
 (commit `8ee41da7433374803373ba7f66d6740a89757b0f`, Enrico), retaining its
 attribution. Further fixes cover the native import manifest's separate directory
-fsync helper, binary descriptors, and temporary descriptor cleanup on errors.
+fsync helper, binary descriptors, and temporary descriptor cleanup on errors. Failed exports close their descriptor
+before attempting to unlink the partial file, including timeouts.
 Use an actual `opencode.exe` with `--target-cli`; native import/export remains the
 same public v2 route. Windows inherits directory ACLs; POSIX mode 0600/0700 does
 not establish equivalent Windows privacy. Store source exports, temporary files,
