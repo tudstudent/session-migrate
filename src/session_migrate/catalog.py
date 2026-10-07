@@ -2079,6 +2079,7 @@ def _scan_file(path: Path, agent_format: AgentFormat, root: Path) -> _Scan:
     history_mode = None
     history_base = False
     codex_subagent_history = False
+    codex_child_start: int | None = None
     codex_ordinals_complete = True
     codex_history_mode_conflict = False
     codex_selected_history_mode = None
@@ -2130,7 +2131,22 @@ def _scan_file(path: Path, agent_format: AgentFormat, root: Path) -> _Scan:
                 payload = value.get("payload")
                 if not isinstance(payload, dict):
                     payload = {}
+                if (
+                    codex_child_start is not None
+                    and records > 1
+                    and isinstance(ordinal, int)
+                    and ordinal < codex_child_start
+                ):
+                    continue
                 if record_type == "session_meta":
+                    if records == 1:
+                        boundary = payload.get("subagent_history_start_ordinal")
+                        if (
+                            isinstance(boundary, int)
+                            and not isinstance(boundary, bool)
+                            and boundary >= 0
+                        ):
+                            codex_child_start = boundary
                     has_session_meta = True
                     session_id = session_id or _normalized_uuid(
                         _string(payload.get("id")) or _string(payload.get("session_id"))
@@ -2295,10 +2311,32 @@ def _scan_file(path: Path, agent_format: AgentFormat, root: Path) -> _Scan:
     elif agent_format == AgentFormat.CODEX:
         if not has_session_meta:
             status, reason = "corrupt", "missing_session_meta"
+        elif codex_subagent_history:
+            # The bounded reader owns child metadata/projection validation.
+            # Parsed content is transient and never stored in the catalog.
+            try:
+                child = codex.parse(path)
+            except SessionMigrateError as exc:
+                if "history_base" in str(exc):
+                    status, reason = "unsupported", "codex_history_base"
+                elif "history mode" in str(exc) and "not supported" in str(exc):
+                    status, reason = "unsupported", "codex_history_mode"
+                else:
+                    status, reason = "corrupt", "codex_subagent_projection"
+            else:
+                if not any(
+                    e.kind
+                    in {
+                        EventKind.MESSAGE,
+                        EventKind.TOOL_CALL,
+                        EventKind.TOOL_RESULT,
+                        EventKind.COMPACTION,
+                    }
+                    for e in child.events
+                ):
+                    status, reason = "corrupt", "no_conversation_records"
         elif history_base:
             status, reason = "unsupported", "codex_history_base"
-        elif codex_subagent_history:
-            status, reason = "unsupported", "codex_subagent_history"
         elif codex_history_mode_conflict:
             status, reason = "corrupt", "codex_history_mode_conflict"
         elif (
