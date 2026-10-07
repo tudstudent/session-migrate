@@ -89,6 +89,13 @@ The separate Windows changes reuse [upstream PR #8](https://github.com/xhluca/se
 attribution. Further fixes cover the native import manifest's separate directory
 fsync helper, binary descriptors, and temporary descriptor cleanup on errors. Failed exports close their descriptor
 before attempting to unlink the partial file, including timeouts.
+Native imports also close their manifest identity guard before deleting a failed
+reservation. Previously, Windows could report WinError 32 during this cleanup
+and hide the original import or finalization failure. Successful finalization
+continues writing the guarded file in place, preserving the identity check;
+it does not replace the open file. Linux regressions simulate Windows denial of
+unlink/replace for open manifests across successful imports, importer failures,
+and finalization failures for OpenCode, Kilo, and shared-database imports.
 Use an actual `opencode.exe` with `--target-cli`; native import/export remains the
 same public v2 route. Windows inherits directory ACLs; POSIX mode 0600/0700 does
 not establish equivalent Windows privacy. Store source exports, temporary files,

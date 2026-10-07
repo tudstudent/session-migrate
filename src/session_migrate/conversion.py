@@ -939,6 +939,11 @@ def install_antigravity_artifact(
             manifest_bytes,
         )
     except BaseException as exc:
+        # Windows cannot unlink an open file. Keep the guard for in-place
+        # finalization, but release it before identity-checked rollback.
+        if reservation_guard is not None:
+            os.close(reservation_guard)
+            reservation_guard = None
         if reservation_identity is not None:
             _unlink_if_identity_matches(manifest_path, reservation_identity)
         if install_succeeded:
@@ -1014,6 +1019,11 @@ def install_cursor_artifact(
             manifest_bytes,
         )
     except BaseException as exc:
+        # Windows cannot unlink an open file. Keep the guard for in-place
+        # finalization, but release it before identity-checked rollback.
+        if reservation_guard is not None:
+            os.close(reservation_guard)
+            reservation_guard = None
         if reservation_identity is not None:
             _unlink_if_identity_matches(manifest_path, reservation_identity)
         if install_succeeded:
@@ -1389,6 +1399,11 @@ def _install_shared_database_artifact(
             manifest_bytes,
         )
     except BaseException as exc:
+        # Windows cannot unlink an open file. Keep the guard for in-place
+        # finalization, but release it before identity-checked rollback.
+        if reservation_guard is not None:
+            os.close(reservation_guard)
+            reservation_guard = None
         if reservation_identity is not None:
             _unlink_if_identity_matches(manifest_path, reservation_identity)
         if import_succeeded:
@@ -1500,6 +1515,11 @@ def install_opencode_artifact(
             manifest_bytes,
         )
     except BaseException as exc:
+        # Windows cannot unlink an open file. Keep the guard for in-place
+        # finalization, but release it before identity-checked rollback.
+        if reservation_guard is not None:
+            os.close(reservation_guard)
+            reservation_guard = None
         if reservation_identity is not None:
             _unlink_if_identity_matches(manifest_path, reservation_identity)
         if import_succeeded:
@@ -1592,6 +1612,11 @@ def install_kilo_artifact(
             manifest_bytes,
         )
     except BaseException as exc:
+        # Windows cannot unlink an open file. Keep the guard for in-place
+        # finalization, but release it before identity-checked rollback.
+        if reservation_guard is not None:
+            os.close(reservation_guard)
+            reservation_guard = None
         if reservation_identity is not None:
             _unlink_if_identity_matches(manifest_path, reservation_identity)
         if import_succeeded:

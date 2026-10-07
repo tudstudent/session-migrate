@@ -94,3 +94,124 @@ def test_native_export_closes_descriptor_before_exception_cleanup(tmp_path, monk
     with pytest.raises(SessionMigrateError, match="CLI export failed"):
         conversion._invoke_opencode_export(Path("opencode.exe"), "ses_test", target, {})
     assert not target.exists()
+
+
+@pytest.mark.parametrize("target", ["opencode", "kilo", "shared"])
+@pytest.mark.parametrize("outcome", ["success", "import_failure", "finalization_failure"])
+def test_manifest_guard_allows_windows_finalization_and_rollback(
+    tmp_path, monkeypatch, target, outcome
+):
+    from session_migrate.conversion import ConversionOptions, convert_session, load_session
+    from session_migrate.errors import SessionMigrateError
+    from session_migrate.formats import kilo, opencode
+    from session_migrate.model import AgentFormat, TargetFormat
+
+    source = load_session(
+        Path(__file__).parent / "fixtures/codex-0.144.4/basic.jsonl", AgentFormat.CODEX
+    )
+    format_ = {
+        "opencode": TargetFormat.OPENCODE,
+        "kilo": TargetFormat.KILO,
+        "shared": TargetFormat.MUSE,
+    }[target]
+    artifact = convert_session(source, ConversionOptions(target_format=format_, cwd=tmp_path))
+    manifest = tmp_path / "manifest.json"
+    guard = None
+    real_guard = conversion._open_identity_guard
+    real_unlink = Path.unlink
+    real_replace = os.replace
+    operations = []
+
+    def guarded(path, identity, **kwargs):
+        nonlocal guard
+        guard = real_guard(path, identity, **kwargs)
+        return guard
+
+    def deny_open_mutation(path):
+        if Path(path) != manifest or guard is None:
+            return
+        try:
+            os.fstat(guard)
+        except OSError:
+            return
+        raise PermissionError(32, "Windows sharing violation", str(path))
+
+    def unlink(path, *args, **kwargs):
+        deny_open_mutation(path)
+        if path == manifest:
+            operations.append("unlink")
+        return real_unlink(path, *args, **kwargs)
+
+    def replace(src, dst, *args, **kwargs):
+        deny_open_mutation(dst)
+        return real_replace(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(conversion, "_open_identity_guard", guarded)
+    monkeypatch.setattr(Path, "unlink", unlink)
+    monkeypatch.setattr(os, "replace", replace)
+
+    def imported(*args, **kwargs):
+        if outcome == "import_failure":
+            raise SessionMigrateError("original import failure")
+        return tmp_path / "database.db"
+
+    if outcome == "finalization_failure":
+
+        def failed_finalization(*args):
+            raise JsonlError("original manifest write failure")
+
+        monkeypatch.setattr(conversion, "_write_reserved_file", failed_finalization)
+
+    cli = tmp_path / "native.exe"
+    if target == "opencode":
+        monkeypatch.setattr(conversion, "_resolve_opencode_cli", lambda *args: cli)
+        monkeypatch.setattr(
+            conversion, "_opencode_version", lambda *args: opencode.PINNED_OPENCODE_VERSION
+        )
+        states = iter([set(), set(), {artifact.session_id}])
+        monkeypatch.setattr(conversion, "_opencode_session_ids", lambda *args: next(states))
+        monkeypatch.setattr(conversion, "_invoke_opencode_import", imported)
+
+        def install():
+            return conversion.install_opencode_artifact(
+                artifact, manifest_path=manifest, environ={}
+            )
+    elif target == "kilo":
+        monkeypatch.setattr(conversion, "_resolve_kilo_cli", lambda *args: cli)
+        monkeypatch.setattr(conversion, "_kilo_version", lambda *args: kilo.PINNED_KILO_VERSION)
+        states = iter([False, False, True])
+        monkeypatch.setattr(conversion, "_kilo_session_exists", lambda *args: next(states))
+        monkeypatch.setattr(conversion, "_invoke_kilo_import", imported)
+
+        def install():
+            return conversion.install_kilo_artifact(artifact, manifest_path=manifest, environ={})
+    else:
+        monkeypatch.setattr(
+            conversion, "shared_database_manifest_path", lambda *args, **kwargs: manifest
+        )
+
+        def install():
+            return conversion._install_shared_database_artifact(
+                artifact, target_home=tmp_path, installer=imported, dry_run=False
+            )
+
+    if outcome == "success":
+        install()
+        assert manifest.read_bytes()
+        assert operations == []
+    else:
+        expected = (
+            "original import failure"
+            if outcome == "import_failure"
+            else "manifest finalization failed"
+        )
+        with pytest.raises(SessionMigrateError, match=expected) as error:
+            install()
+        if outcome == "finalization_failure":
+            assert isinstance(error.value.__cause__, JsonlError)
+            assert "original manifest write failure" in str(error.value.__cause__)
+        assert operations == ["unlink"]
+        assert not manifest.exists()
+    assert guard is not None
+    with pytest.raises(OSError):
+        os.fstat(guard)
