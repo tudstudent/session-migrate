@@ -160,11 +160,13 @@ def write_private_atomic(path: Path, data: bytes) -> tuple[int, int]:
         )
         temporary_path = Path(temporary_name)
         published_identity: tuple[int, int] | None = None
+        descriptor_owned = True
         try:
             # os.fchmod is Unix-only; Windows keeps the creating user's ACLs.
             if hasattr(os, "fchmod"):
                 os.fchmod(descriptor, 0o600)
             with os.fdopen(descriptor, "wb") as stream:
+                descriptor_owned = False
                 stream.write(data)
                 stream.flush()
                 os.fsync(stream.fileno())
@@ -181,6 +183,9 @@ def write_private_atomic(path: Path, data: bytes) -> tuple[int, int]:
             _fsync_directory(path.parent)
             return published_identity
         except BaseException:
+            if descriptor_owned:
+                with contextlib.suppress(OSError):
+                    os.close(descriptor)
             # A cleanup failure must not replace the error being reported.
             with contextlib.suppress(OSError):
                 temporary_path.unlink(missing_ok=True)
@@ -210,8 +215,8 @@ def _mkdir_private(path: Path) -> None:
 
 
 def _fsync_directory(path: Path) -> None:
-    # Windows cannot os.open() a directory, and NTFS journaling keeps
-    # directory entries durable without an explicit fsync.
+    # Windows cannot os.open() a directory. The file is still flushed;
+    # directory crash durability depends on the filesystem/platform.
     if os.name == "nt":
         return
     descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))

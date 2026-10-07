@@ -35,3 +35,17 @@ omission counts. Native database imports remain owned by OpenCode.
 Validation currently targets the installed Linux gateway build of OpenCode
 2.0.23, using synthetic transcripts and no paid model requests. Windows native
 validation is separate; Linux tests do not establish Windows runtime behavior.
+
+## Windows preparation
+
+The separate Windows changes reuse [upstream PR #8](https://github.com/xhluca/session-migrate/pull/8)
+(commit `8ee41da7433374803373ba7f66d6740a89757b0f`, Enrico), retaining its
+attribution. Further fixes cover the native import manifest's separate directory
+fsync helper, binary descriptors, and temporary descriptor cleanup on errors.
+Use an actual `opencode.exe` with `--target-cli`; native import/export remains the
+same public v2 route. Windows inherits directory ACLs; POSIX mode 0600/0700 does
+not establish equivalent Windows privacy. Store source exports, temporary files,
+and migration manifests under directories accessible only to your Windows user.
+File contents are flushed, but skipped directory fsync means crash durability
+has not been established by these tests. Linux mock tests exercise the Windows
+branches; real Windows import/export/reopen validation is still required.

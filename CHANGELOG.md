@@ -12,9 +12,12 @@ here. Native format compatibility is documented separately in
   for incomplete tools and provider-private state.
 - Fix atomic writes on Windows in `write_private_atomic`: skip the Unix-only
   `os.fchmod` call and the directory `fsync` where the platform cannot
-  perform them (Windows keeps the creating user's ACLs and NTFS journaling
-  covers directory durability), and make temporary-file cleanup best-effort
+  perform them (Windows inherits the destination directory's ACLs), and make temporary-file cleanup best-effort
   so a cleanup failure cannot mask the original error.
+
+- Complete Windows native-import manifest handling: skip its separate directory
+  fsync, use binary descriptors, and close a temporary descriptor if setup fails.
+  Windows crash durability and ACL privacy remain platform-dependent.
 
 ## 0.11.0 - 2026-09-11
 

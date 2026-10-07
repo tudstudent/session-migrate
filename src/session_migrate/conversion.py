@@ -1895,7 +1895,7 @@ def _invoke_opencode_export(
 ) -> None:
     """Export to a regular file because the pinned CLI truncates large stdout pipes."""
 
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     descriptor: int | None = None
@@ -2119,6 +2119,8 @@ def _write_reserved_file(
 
 
 def _fsync_directory(path: Path) -> None:
+    if os.name == "nt":
+        return
     descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
     try:
         os.fsync(descriptor)
@@ -2149,7 +2151,8 @@ def _open_identity_guard(path: Path, identity: tuple[int, int], *, writable: boo
             path,
             (os.O_RDWR if writable else os.O_RDONLY)
             | getattr(os, "O_CLOEXEC", 0)
-            | getattr(os, "O_NOFOLLOW", 0),
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_BINARY", 0),
         )
     except OSError as exc:
         raise JsonlError(
