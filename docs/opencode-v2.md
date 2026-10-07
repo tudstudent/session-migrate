@@ -42,7 +42,7 @@ omission counts. Native database imports remain owned by OpenCode.
 
 Validation currently targets the installed Linux gateway build of OpenCode
 2.0.23, using synthetic transcripts and no paid model requests. Windows native
-validation is separate; Linux tests do not establish Windows runtime behavior.
+validation is recorded separately below; Linux tests alone do not establish Windows runtime behavior.
 
 ## Validation record
 
@@ -72,8 +72,8 @@ native legacy OpenCode 1.17.20 was not installed; its unit and wire-format
 regressions ran, but its original native CLI tests did not. This is not a claim
 that all 18 supported clients were tested live. The 2.0.x version selector is
 tested independently; native behavior was verified only on the installed 2.0.23
-build. Real Windows native import/export/reopen remains untested. These gates
-made no real supplier requests and imported no real user sessions.
+build. The Linux gates made no real supplier requests and imported no real user sessions.
+Subsequent user-run Windows evidence is recorded separately below.
 
 The full suite uses a consistent datastore `TMPDIR` and pytest `--basetemp`.
 An earlier run with those roots mismatched failed an existing OMP temporary-path
@@ -102,4 +102,43 @@ not establish equivalent Windows privacy. Store source exports, temporary files,
 and migration manifests under directories accessible only to your Windows user.
 File contents are flushed, but skipped directory fsync means crash durability
 has not been established by these tests. Linux mock tests exercise the Windows
-branches; real Windows import/export/reopen validation is still required.
+branches; user-run Windows import/export/reopen evidence follows below.
+
+
+## User-run Windows validation (2026-10-07)
+
+Python 3.13.7 and a custom OpenCode `2.0.23-gateway.3648f00e` build were
+validated through a user-run Windows test package, using the converter at
+`8e9b9a0`. This is runtime evidence for that particular build, not a Windows
+full-suite run or validation of every 2.0.x release.
+
+- A synthetic source converted successfully, then imported/exported through
+  the public native CLI in a fresh isolated profile. Text, an image, linked
+  tool input/result and a readable compaction summary were retained. The
+  user confirmed the same history displayed on reopening the native TUI.
+- A 73.37 MB real source was audited before import: 559 readable message
+  events, 1,589 tool calls and 1,589 tool-result texts matched. All 59
+  malformed-text counters represented empty strings. Its native import
+  subsequently passed export verification.
+- A batch considered 42 source files and verified 28 native sessions.
+  Repeated runs recognised previously imported IDs instead of duplicating
+  them. Five existing sessions were moved to current project directories
+  through OpenCode's public move API while retaining IDs and content.
+- Fourteen files were not imported: seven intentionally excluded obsolete
+  projects, one log without readable conversation, and six unsupported
+  paginated subagent-history projections. These are explicit exclusions;
+  they must not be described as a complete migration of all source files.
+
+The batch orchestration and path mappings live outside this library. Its first
+message audit produced false mismatches when multiple user text blocks from
+one source record became the exact newline-joined v2 `user.text`. The corrected
+audit compares exact ordered messages after that narrow normalization, retaining
+separate source records, assistant text blocks and tool/compaction boundaries.
+Changed, removed and reordered messages remain rejected. All 14 affected
+previews then passed and imported. This was an audit correction, not a relaxation
+of the converter's safety checks.
+
+Source files, manifests and database backups were retained. No inference/model
+requests were made during these Windows checks. Real-session model continuation,
+crash durability, encrypted-state reuse and native paginated-subagent conversion
+were not tested. Encrypted/private state omissions remain as documented above.
