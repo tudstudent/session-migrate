@@ -40,6 +40,44 @@ Validation currently targets the installed Linux gateway build of OpenCode
 2.0.23, using synthetic transcripts and no paid model requests. Windows native
 validation is separate; Linux tests do not establish Windows runtime behavior.
 
+## Validation record
+
+The implementation at `eeb2623` was validated on Linux with Python 3.12 and
+the installed OpenCode 2.0.23 gateway binary:
+
+- Full Python suite: **1,557 passed, 55 skipped**, with 1,343 existing
+  Devin/SQLite deprecation warnings. The run completed in 2,167.20 seconds.
+- Repository-wide Ruff checks and formatting checks for all ten changed Python
+  files passed. The wheel built and installed into a separate clean virtual
+  environment; its public CLI converted a synthetic Codex fixture into a valid
+  v2 bundle, retaining its portable compaction.
+- Opt-in native v2 tests exercised public import/export, dry run, identity
+  collisions, linked tool content, inline user/tool images, and completed
+  compaction in isolated, credential-free HOME/XDG directories.
+- An independent actual-native continuation test sent the imported compaction
+  summary and a new prompt to one loopback fake-provider request. The reply
+  persisted under the same session ID (six imported messages became ten), and
+  a cold native TUI reopen displayed that persisted reply.
+- A separate independent continuation test confirmed the original tool call
+  and its linked `/work` result appeared in the fake-provider request. Its
+  continued reply also persisted under the same ID (five messages became nine).
+
+The full-suite skips cover unavailable exact-pinned historical clients, opt-in
+live-client gates, and the opt-in real-store catalog smoke test. In particular,
+native legacy OpenCode 1.17.20 was not installed; its unit and wire-format
+regressions ran, but its original native CLI tests did not. This is not a claim
+that all 18 supported clients were tested live. The 2.0.x version selector is
+tested independently; native behavior was verified only on the installed 2.0.23
+build. Real Windows native import/export/reopen remains untested. These gates
+made no real supplier requests and imported no real user sessions.
+
+The full suite uses a consistent datastore `TMPDIR` and pytest `--basetemp`.
+An earlier run with those roots mismatched failed an existing OMP temporary-path
+expectation; the corrected environment passed without modifying or suppressing
+that test. Provider-private traces and source reasoning variants remain the
+explicit omissions described above; native continuation does not establish
+their portability or recover malformed source records.
+
 ## Windows preparation
 
 The separate Windows changes reuse [upstream PR #8](https://github.com/xhluca/session-migrate/pull/8)
