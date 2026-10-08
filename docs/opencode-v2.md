@@ -40,14 +40,14 @@ binary instead of a user wrapper that injects production credentials. Migration
 manifests contain source hashes, the target release, conversion warnings, and
 omission counts. Native database imports remain owned by OpenCode.
 
-Validation currently targets the installed Linux gateway build of OpenCode
-2.0.23, using synthetic transcripts and no paid model requests. Windows native
+Validation currently targets the installed Linux OpenCode
+2.0.23 CLI, using synthetic transcripts and no paid model requests. Windows native
 validation is recorded separately below; Linux tests alone do not establish Windows runtime behavior.
 
 ## Validation record
 
 The implementation at `eeb2623` was validated on Linux with Python 3.12 and
-the installed OpenCode 2.0.23 gateway binary:
+the installed OpenCode 2.0.23 CLI:
 
 - Full Python suite: **1,557 passed, 55 skipped**, with 1,343 existing
   Devin/SQLite deprecation warnings. The run completed in 2,167.20 seconds.
@@ -176,3 +176,42 @@ independent conversations; live parent/child orchestration is not restored.
 
 The Windows script reported no inference/model requests. Real child-session model
 continuation and native TUI reopening of these six imports were not tested.
+
+
+## User-run Linux migration and newer v2 client compatibility (2026-10-08)
+
+The existing adapters and the v2 target transferred **33 real conversations**:
+28 Codex chats and five Claude chats. Public native import/export verification
+passed using OpenCode 2.0.23; one Codex log without readable conversation was
+skipped. All recorded project directories existed. The Claude input adapter was
+already supported and required no new conversation parser.
+
+Three Codex source files contained isolated truncated duplicate fragments, each
+followed by its intact record at the same ordinal. Outside this library, private
+source copies were cleaned only after the full readable prefix matched the intact
+record apart from its leading timestamp. Exact fragments and original sources
+were archived; intact records were preserved byte-for-byte. This preprocessing
+is not included in this PR: the library still rejects malformed JSONL and does
+not provide arbitrary recovery or repair. User-specific batch orchestration,
+project mappings, credentials, and launcher setup are also outside the change.
+
+A subsequent compiled OpenCode 2.0.24 build with an unrelated gateway-discovery
+feature opened a read-only-backup copy of the imported database. The selected
+large conversation's exported message array was identical before and after the
+client change; the upgraded copy contained 38 session rows.
+The user then confirmed the updated client works. This is compatibility evidence
+for that build, not an upstream 2.0.24 native transfer matrix or proof that every
+conversation was continued against a live model. No inference was requested by
+the migration or copied-database checks. Real model continuation remains outside
+the retained migration validation evidence.
+
+## Final publication regression gate (2026-10-08)
+
+The complete runtime revision passed 149 tests with one optional real-store
+catalog test skipped in the v2 adapter, child-history, Windows, JSONL and catalog
+suites. Native tests used an isolated profile and a compiled OpenCode 2.0.24 CLI
+with a custom suffix. An additional CLI/conversion/inspection gate passed all
+60 tests. These checks made no supplier inference requests. Ruff checks and
+formatting passed (128 files unchanged); the Git diff whitespace check passed.
+The earlier full-suite result remains historical evidence, not a claim that
+the entire suite was rerun on the final revision.
