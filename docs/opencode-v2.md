@@ -153,5 +153,26 @@ of the converter's safety checks.
 
 Source files, manifests and database backups were retained. No inference/model
 requests were made during these Windows checks. Real-session model continuation,
-crash durability, encrypted-state reuse and native paginated-subagent conversion
-were not tested. Encrypted/private state omissions remain as documented above.
+crash durability and encrypted-state reuse were not tested. Encrypted/private
+state omissions remain as documented above.
+
+
+## User-run Windows subagent validation (2026-10-08)
+
+The same Python 3.13.7 and custom OpenCode build were tested with the converter
+at `410e774`. The batch reverified all 28 existing imports and imported all six
+previously unsupported paginated subagent logs. Each new import passed the
+source-to-preview portable-content audit and public native import/export checks.
+This establishes actual Windows native transfer for these six child histories;
+it does not establish every Codex version or child-history variant.
+
+The final result was **34 verified native chats out of 42 source files**. The
+eight remaining exclusions were seven obsolete project directories intentionally
+skipped by the user and one log without readable user/assistant conversation.
+There were no remaining unsupported paginated-subagent exclusions in this batch.
+Inherited parent history, encrypted correspondence and other private/opaque state
+were omitted with per-session counters, as documented above. Child chats are
+independent conversations; live parent/child orchestration is not restored.
+
+The Windows script reported no inference/model requests. Real child-session model
+continuation and native TUI reopening of these six imports were not tested.
