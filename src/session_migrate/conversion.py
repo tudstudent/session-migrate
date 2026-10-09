@@ -925,6 +925,11 @@ def install_antigravity_artifact(
             manifest_bytes,
         )
     except BaseException as exc:
+        # Windows cannot unlink an open file. Keep the guard for in-place
+        # finalization, but release it before identity-checked rollback.
+        if reservation_guard is not None:
+            os.close(reservation_guard)
+            reservation_guard = None
         if reservation_identity is not None:
             _unlink_if_identity_matches(manifest_path, reservation_identity)
         if install_succeeded:
@@ -1000,6 +1005,11 @@ def install_cursor_artifact(
             manifest_bytes,
         )
     except BaseException as exc:
+        # Windows cannot unlink an open file. Keep the guard for in-place
+        # finalization, but release it before identity-checked rollback.
+        if reservation_guard is not None:
+            os.close(reservation_guard)
+            reservation_guard = None
         if reservation_identity is not None:
             _unlink_if_identity_matches(manifest_path, reservation_identity)
         if install_succeeded:
@@ -1375,6 +1385,11 @@ def _install_shared_database_artifact(
             manifest_bytes,
         )
     except BaseException as exc:
+        # Windows cannot unlink an open file. Keep the guard for in-place
+        # finalization, but release it before identity-checked rollback.
+        if reservation_guard is not None:
+            os.close(reservation_guard)
+            reservation_guard = None
         if reservation_identity is not None:
             _unlink_if_identity_matches(manifest_path, reservation_identity)
         if import_succeeded:
@@ -1472,6 +1487,11 @@ def install_opencode_artifact(
             manifest_bytes,
         )
     except BaseException as exc:
+        # Windows cannot unlink an open file. Keep the guard for in-place
+        # finalization, but release it before identity-checked rollback.
+        if reservation_guard is not None:
+            os.close(reservation_guard)
+            reservation_guard = None
         if reservation_identity is not None:
             _unlink_if_identity_matches(manifest_path, reservation_identity)
         if import_succeeded:
@@ -1564,6 +1584,11 @@ def install_kilo_artifact(
             manifest_bytes,
         )
     except BaseException as exc:
+        # Windows cannot unlink an open file. Keep the guard for in-place
+        # finalization, but release it before identity-checked rollback.
+        if reservation_guard is not None:
+            os.close(reservation_guard)
+            reservation_guard = None
         if reservation_identity is not None:
             _unlink_if_identity_matches(manifest_path, reservation_identity)
         if import_succeeded:
@@ -1836,7 +1861,7 @@ def _invoke_opencode_export(
 ) -> None:
     """Export to a regular file because the pinned CLI truncates large stdout pipes."""
 
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     descriptor: int | None = None
@@ -1852,6 +1877,11 @@ def _invoke_opencode_export(
         )
         os.fsync(descriptor)
     except (OSError, subprocess.TimeoutExpired) as exc:
+        # Windows cannot unlink an open export. Preserve the original failure.
+        if descriptor is not None:
+            with suppress(OSError):
+                os.close(descriptor)
+            descriptor = None
         with suppress(OSError):
             bundle_path.unlink()
         raise SessionMigrateError("OpenCode CLI export failed") from exc
@@ -2056,6 +2086,8 @@ def _write_reserved_file(
 
 
 def _fsync_directory(path: Path) -> None:
+    if os.name == "nt":
+        return
     descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
     try:
         os.fsync(descriptor)
@@ -2086,7 +2118,8 @@ def _open_identity_guard(path: Path, identity: tuple[int, int], *, writable: boo
             path,
             (os.O_RDWR if writable else os.O_RDONLY)
             | getattr(os, "O_CLOEXEC", 0)
-            | getattr(os, "O_NOFOLLOW", 0),
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_BINARY", 0),
         )
     except OSError as exc:
         raise JsonlError(
