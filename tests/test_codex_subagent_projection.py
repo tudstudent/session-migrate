@@ -69,7 +69,7 @@ def test_child_metadata_plaintext_and_tool_image_linkage_roundtrip(tmp_path):
         session,
         ConversionOptions(
             target_format=TargetFormat.OPENCODE,
-            target_cli_version="2.0.23",
+            target_cli_version="1.17.20",
             cwd=tmp_path,
             model_provider="fixture",
             model="test",
@@ -80,7 +80,7 @@ def test_child_metadata_plaintext_and_tool_image_linkage_roundtrip(tmp_path):
     assert target.dropped["opaque:subagent_inherited_prefix"] == start - 1
     assert target.dropped["opaque:subagent_encrypted_message_part"] == 1
     assert target.dropped["opaque:subagent_message_envelope"] == 1
-    path = tmp_path / "v2.json"
+    path = tmp_path / "legacy.json"
     path.write_bytes(target.native_bytes)
     reopened = opencode.parse_import(path)
     assert any(e.text == messages[0].text and e.role == Role.USER for e in reopened.events)
@@ -135,7 +135,7 @@ def test_complete_prefix_with_empty_child_suffix_is_valid_but_not_resumable(tmp_
         convert_session(
             session,
             ConversionOptions(
-                target_format=TargetFormat.OPENCODE, target_cli_version="2.0.23", cwd=tmp_path
+                target_format=TargetFormat.OPENCODE, target_cli_version="1.17.20", cwd=tmp_path
             ),
         )
 
@@ -287,3 +287,60 @@ def test_catalog_classification_matches_bounded_child_parser(tmp_path, kind):
         "empty": ("corrupt", "no_conversation_records"),
     }
     assert (scan.status, scan.reason) == expected[kind]
+
+
+def test_pinned_legacy_client_accepts_child_projection_without_parent_context(tmp_path):
+    import os
+
+    from session_migrate.conversion import install_opencode_artifact, load_opencode_session
+
+    binary = os.environ.get("SESSION_MIGRATE_OPENCODE_BIN")
+    if not binary:
+        pytest.skip("set SESSION_MIGRATE_OPENCODE_BIN to the pinned 1.17.20 executable")
+    env = {
+        "PATH": "/usr/bin:/bin",
+        "OPENCODE_DISABLE_AUTOUPDATE": "true",
+        "OPENCODE_CONFIG_CONTENT": '{"disabled_providers":["opencode"]}',
+    }
+    for key in [
+        "HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_STATE_HOME",
+        "XDG_CACHE_HOME",
+        "TMPDIR",
+    ]:
+        folder = tmp_path / key.lower()
+        folder.mkdir()
+        env[key] = str(folder)
+    source = codex.parse(write(tmp_path, records()))
+    artifact = convert_session(
+        source,
+        ConversionOptions(
+            target_format=TargetFormat.OPENCODE,
+            target_cli_version="1.17.20",
+            cwd=tmp_path,
+            model_provider="fixture",
+            model="test",
+        ),
+    )
+    install_opencode_artifact(
+        artifact, manifest_path=tmp_path / "manifest.json", target_cli=Path(binary), environ=env
+    )
+    reopened = load_opencode_session(artifact.session_id, source_cli=Path(binary), environ=env)
+    assert any(
+        e.kind == EventKind.MESSAGE and e.text == "Child task — λ\nkeep exact"
+        for e in reopened.events
+    )
+    assert any(
+        e.kind == EventKind.TOOL_CALL and e.tool_call_id == "call_fixture_1"
+        for e in reopened.events
+    )
+    assert any(
+        e.kind == EventKind.TOOL_RESULT and e.tool_call_id == "call_fixture_1"
+        for e in reopened.events
+    )
+    assert not any(
+        "PARENT PRIVATE INPUT" in str(e.payload) or "PRIVATE CIPHERTEXT" in str(e.payload)
+        for e in reopened.events
+    )

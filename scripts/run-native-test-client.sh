@@ -95,6 +95,7 @@ case "$client" in
       tests/test_additional_formats_native.py::test_opencode_11720_official_import_and_loopback_resume
       tests/test_additional_formats_native.py::test_opencode_cli_import_uses_official_importer_and_rejects_native_collision
       tests/test_additional_formats_native.py::test_opencode_native_replay_preserves_source_order_with_decreasing_timestamps
+      tests/test_codex_subagent_projection.py::test_pinned_legacy_client_accepts_child_projection_without_parent_context
       'tests/test_opencode_kilo_corpus_native.py::test_exact_client_captures_from_empty_through_public_surfaces[opencode]'
       'tests/test_opencode_kilo_corpus_native.py::test_exact_client_cold_import_export_and_continuation_preserve_prefix[opencode]'
     )
