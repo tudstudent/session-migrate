@@ -148,7 +148,7 @@ def encode_jsonl(records: Iterable[Mapping[str, Any]]) -> bytes:
 
 
 def write_private_atomic(path: Path, data: bytes) -> tuple[int, int]:
-    """Write mode-0600 bytes atomically without silently replacing a session."""
+    """Write atomically without replacement; POSIX modes do not enforce Windows ACLs."""
 
     path = Path(os.path.abspath(path.expanduser()))
     if os.path.lexists(path):
@@ -162,7 +162,7 @@ def write_private_atomic(path: Path, data: bytes) -> tuple[int, int]:
         published_identity: tuple[int, int] | None = None
         descriptor_owned = True
         try:
-            # os.fchmod is Unix-only; Windows keeps the creating user's ACLs.
+            # os.fchmod is Unix-only; Windows privacy depends on destination ACLs.
             if hasattr(os, "fchmod"):
                 os.fchmod(descriptor, 0o600)
             with os.fdopen(descriptor, "wb") as stream:

@@ -9,6 +9,9 @@ here. Native format compatibility is documented separately in
 ## Unreleased
 
 - Make atomic writes portable on Windows (Enrico, upstream PR #8).
+- Windows file data is flushed, but directory crash durability remains
+  platform-dependent and confidentiality depends on destination ACLs; POSIX
+  mode-0600/0700 does not establish owner-only Windows permissions.
 
 ## 0.11.0 - 2026-09-11
 

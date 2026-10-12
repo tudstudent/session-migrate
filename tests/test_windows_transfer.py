@@ -17,18 +17,20 @@ def test_windows_directory_fsync_skips_both_helpers(tmp_path, monkeypatch):
     with monkeypatch.context() as patch:
         patch.setattr(os, "name", "nt")
         patch.setattr(os, "open", unexpected)
+        patch.setattr(os, "fsync", unexpected)
         jsonl._fsync_directory(tmp_path)
         conversion._fsync_directory(tmp_path)
 
 
-def test_failed_atomic_setup_closes_owned_descriptor(tmp_path, monkeypatch):
+@pytest.mark.parametrize("failure", ["fchmod", "fdopen"])
+def test_failed_atomic_setup_closes_owned_descriptor(tmp_path, monkeypatch, failure):
     seen = []
 
     def fail(descriptor, mode):
         seen.append(descriptor)
         raise OSError("failed setup")
 
-    monkeypatch.setattr(os, "fchmod", fail, raising=False)
+    monkeypatch.setattr(os, failure, fail, raising=False)
     with pytest.raises(JsonlError, match="failed setup"):
         jsonl.write_private_atomic(tmp_path / "file.json", b"{}\n")
     assert seen
